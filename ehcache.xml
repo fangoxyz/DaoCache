@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<ehcache name="ColorCache">
+  <defaultCache
+      maxElementsInMemory="100000"
+      eternal="false"
+      timeToIdleSeconds="36000"
+      timeToLiveSeconds="36000"
+      diskSpoolBufferSizeMB="30"
+      maxElementsOnDisk="10000000"
+      memoryStoreEvictionPolicy="LFU"
+      diskExpiryThreadIntervalSeconds="36000"> 
+  </defaultCache>
+ <!--  <cache name="colors"
+         maxElementsInMemory="100000"
+         maxElementsOnDisk="10000000"
+         eternal="false"
+         timeToIdleSeconds="36000"
+         timeToLiveSeconds="36000">
+     
+  </cache> -->
+  <cache name="session"
+         maxElementsInMemory="100000"
+         maxElementsOnDisk="1000000" 
+         eternal="false"
+         timeToIdleSeconds="0"
+         timeToLiveSeconds="0">
+     
+  </cache>
+
+</ehcache>
