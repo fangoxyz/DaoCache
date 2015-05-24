@@ -6,11 +6,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import net.sf.ehcache.Cache;
@@ -18,17 +14,9 @@ import net.sf.ehcache.CacheManager;
 import net.sf.ehcache.Ehcache;
 import net.sf.ehcache.Element;
 
-import org.nutz.dao.entity.Entity;
-import org.nutz.dao.entity.MappingField;
 import org.nutz.log.Log;
 import org.nutz.log.Logs;
-import org.nutz.mvc.annotation.At;
-import org.nutz.mvc.annotation.Ok;
-import org.nutz.mvc.annotation.Param;
 import org.nutz.plugins.cache.dao.CacheResult;
-
-import com.youfang.web.annotation.Authority;
-import com.youfang.web.annotation.EnumAuthority;
 
 /**
  * 
@@ -127,10 +115,11 @@ public class MemeoryCacheImpl implements CacheController {
 	
  
 	public void flush(CacheModel cacheModel) { 
+		if (cacheModel==null) return;
 		Ehcache tmpCache = getCache(cacheModel,false);
 		 if (tmpCache!=null) {
 			 tmpCache.removeAll(); 
-			 flushTimes=flushAtomLong.getAndIncrement();
+			 flushTimes=flushAtomLong.getAndIncrement(); 
 		 } 
 		 if (cacheModel !=null){
 			 flushCacheLinks(cacheModel.getName());
@@ -145,6 +134,8 @@ public class MemeoryCacheImpl implements CacheController {
 	
 
 	public void removeObject(CacheModel cacheModel, Object key) { 
+		if (cacheModel==null) return;
+		if (key==null) return;
 		Ehcache tmpCache = getCache(cacheModel,false);
 		 if (tmpCache!=null) {
 			 tmpCache.remove(key) ;
@@ -153,7 +144,8 @@ public class MemeoryCacheImpl implements CacheController {
 	} 
  
 	public Object getObject(CacheModel cacheModel, Object key) {
-		 
+		if (cacheModel==null) return CacheResult.NOT_FOUNT;
+		if (key==null) return CacheResult.NOT_FOUNT;
 		Element elem = getCache(cacheModel).get(key);
 		if (elem==null){  
 			//synchronized (lock) {
@@ -173,6 +165,8 @@ public class MemeoryCacheImpl implements CacheController {
 	} 
 
 	public void putObject(CacheModel cacheModel, Object key, Object object) { 
+		if (cacheModel==null) return;
+		if (key==null) return;
 		Serializable data = (Serializable) object ; 
 		Object obj=null;
 		if (data==null){

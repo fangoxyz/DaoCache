@@ -4,7 +4,6 @@ import java.io.Serializable;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -21,10 +20,10 @@ import org.nutz.plugins.cache.dao.CacheResult;
 import org.nutz.plugins.cache.dao.NSqlAdapter;
 
 import com.alibaba.druid.sql.ast.SQLStatement;
-import com.alibaba.druid.sql.ast.expr.SQLBinaryOpExpr;
 import com.alibaba.druid.sql.ast.statement.SQLSelectItem;
 import com.alibaba.druid.sql.dialect.mysql.parser.MySqlStatementParser;
 import com.alibaba.druid.sql.parser.SQLStatementParser;
+import com.alibaba.fastjson.JSON;
 import com.youfang.util.encrypt.EncryptUtil;
 
 /**
@@ -58,48 +57,50 @@ public class CacheExecExterior implements ExecExteriorMethod {
 	
 	private static Log log = Logs.getLog(CacheExecExterior.class);
 	 
-	
+	/*
+	 * 当执行了数据库操作后,"insert"、"update"、"delete"则清理数据,"select"则缓存数据
+	 */
 	public void executeAfter(String sqls, DaoStatement st) {
 		if(!isEnableCache){
 			return;
 		}
-		/*
-		 * 这里做清理操作，不论多个或单个，遇到非select就执行清理数据。
-		 */
+		 
 		try{ 
-			/*
-			 * 清理数据
-			 */
-			WhereModel where=getOneWhere(sqls.toString());
-			List<String>  tables = new ArrayList<String>();
-			//List<String>  tables = getTableFromSql(sqls.toString());
-			String type = getSqlExecuteType(sqls.toString()); 
+			//用druid分析sql语句，分析结果存在wher中
+			WhereModel where=getOneWhere(sqls.toString());  
+			//如果sql分析结果为null,即为不可分析的sql语句，则不做任何操作.
+			if (where ==null ){
+				return; 	
+			}
 			Boolean canCache=true;
-			Boolean key=false;
-			String  rightWhere="";
+			Boolean key=false;  
+			String left=where.getLeft();
+			String oper=where.getOp();
+			String sel1=where.getSel();
+			String rightWhere=where.getRight();
+			List<String>  tables=where.getTableNames(); 
+			String type = getSqlExecuteType(sqls.toString()); 
 			/**
 			 * 判断此条sql语句是否是主键sql
 			 */
-			if (where !=null ){
-				String left=where.getLeft();
-				String oper=where.getOp();
-				String sel1=where.getSel();
-				rightWhere=where.getRight();
-				tables=where.getTableNames();
-				if (left!=null && oper!=null && oper.equalsIgnoreCase("equality")&& sel1.equalsIgnoreCase("*") && tables!=null && tables.size()==1  ){
-					key=isKey(st,left,tables.get(0));
-				}
-			}  
+			if(("insert".equalsIgnoreCase(type) || "update".equalsIgnoreCase(type) || "delete".equalsIgnoreCase(type)) && left!=null && oper!=null && oper.equalsIgnoreCase("equality")  && tables!=null && tables.size()==1 ){
+				key=isKey(st,left,tables.get(0));
+			}else if( "select".equalsIgnoreCase(type) && left!=null && oper!=null && oper.equalsIgnoreCase("equality")&& sel1.equalsIgnoreCase("*") && tables!=null && tables.size()==1  ){ 
+				key=isKey(st,left,tables.get(0));
+			} 
 			
 			for(String tableName:tables){
+				/**
+				 * 遍历sql中涉及的所有表,如果有一个表不在缓存域中，则不能缓存
+				 * 此处主要是为了在select语句时缓存数据
+				 */ 
 				if(tableName == null || "".equals(tableName)){
-					canCache=false;
-					break ;
-					
+					canCache=false; 
+					break;
 				} 
 				if( cacheModelMap.get(tableName) == null){
-					canCache=false;
-					break; 
+					canCache=false; 
+					break;
 				}
 				 
 				if("insert".equalsIgnoreCase(type) || "update".equalsIgnoreCase(type) || "delete".equalsIgnoreCase(type)){
@@ -109,7 +110,7 @@ public class CacheExecExterior implements ExecExteriorMethod {
 						return;
 						//此sql注明不清除缓存，则直接跳出
 					}else{
-						log.debug("sql:" + sqls.toString() + ",删除域数据：" + tableName);   
+						log.debug("sql:" + sqls.toString() + ",删除域相关数据：" + tableName);   
 						if (key){
 							/**
 							 * 1.如果是update 或者 delete的主键操作 清除L2全部以及L1的单条数据
@@ -128,10 +129,8 @@ public class CacheExecExterior implements ExecExteriorMethod {
 								cacheController.flush(new CacheModel(genL1CacheName(tableName)));
 							}
 							log.debug("清除L1缓存 " + genL1CacheName(tableName) + " 所有数据，及 l2 " + tableName +" 中的所有数据   sql:"+ sqls.toString());
-						}
-						
-						cacheController.putLog(sqls.toString(),"");
-						
+						} 
+						cacheController.putLog(sqls.toString(),""); 
 					}
 				}
 			}
@@ -178,6 +177,7 @@ public class CacheExecExterior implements ExecExteriorMethod {
 				 */
 				 
 				WhereModel where=getOneWhere(sqls.toString());
+				if (where==null) return true;
 				List<String> tableNames =where.getTableNames();
 				//List<String> tableNames = getTableFromSql(sqls.toString()); 
 				for(String tableName:tableNames){
@@ -298,55 +298,83 @@ public class CacheExecExterior implements ExecExteriorMethod {
 		return ret;  
 	}
 	
+	public static void main (String[] args){
+		CacheExecExterior ce=new CacheExecExterior();
+		 
+		WhereModel wm=ce.getOneWhere("update   t_housepicture set value=1111  where id=111");
+		log.debug(JSON.toJSON(wm));
+	}
 	 
 	
-	private WhereModel getOneWhere(String sql){ 
-		SQLStatementParser parser = new MySqlStatementParser(sql);
-		
-		List<SQLStatement> statementList = parser.parseStatementList();
-		if (statementList.size() != 1) {
-			log.warn("more than one sql in one DaoStatement!! skip cache detect!!"); 
-			return null;
-		}
-		SQLStatement sqlStatement = statementList.get(0);
-		if (sqlStatement == null) {
-			log.warn("can't parse SQL !! skip cache detect!! SQL=" + sql);  
-			return null;
-		}
-		// 检查需要执行的sql
-		NSqlAdapter adapter = new NSqlAdapter();
-		sqlStatement.accept(adapter); // 得到将会操作的表 
-		List<String> tableNames = adapter.tableNames;  
-		if (adapter.wheres ==null) return null;
-		String left=adapter.wheres.getLeft()==null?null:adapter.wheres.getLeft().toString();
-		String op=adapter.wheres.getOperator()==null?null:adapter.wheres.getOperator().toString();
-		String right=adapter.wheres.getRight()==null?null:adapter.wheres.getRight().toString();
-		String sel1="";
+	private   WhereModel getOneWhere(String sql){ 
 		 
-		if (op==null ){
-			return new WhereModel(tableNames);
-		}
-		if (!op.equalsIgnoreCase("equality")){
-			return new WhereModel(tableNames);
-		}
-		List<SQLSelectItem> selList=adapter.selList;
-		if (selList!=null){ 
-			if (selList.size()==1 ){
-				sel1=selList.get(0).getExpr().toString(); 
+			SQLStatementParser parser = new MySqlStatementParser(sql);
+		
+			List<SQLStatement> statementList = null;
+			
+			try {
+	            statementList = parser.parseStatementList();
+	        }
+	        catch (Exception e) {
+	            log.debug("parser SQL sql, skip cache detect!! SQL=" + sql); 
+	            return null;
+	        }
+			
+			if (statementList.size() != 1) {
+				log.warn("more than one sql in one DaoStatement!! skip cache detect!!"); 
+				return null;
+			} 
+			SQLStatement sqlStatement = statementList.get(0);
+			if (sqlStatement == null) {
+				log.warn("sqlStatement is null,can't parse SQL !! skip cache detect!! SQL=" + sql);  
+				return null;
 			}
-		} 
-		return new WhereModel(left,op,right,sel1,tableNames); 
+			// 检查需要执行的sql
+			NSqlAdapter adapter = new NSqlAdapter();
+			sqlStatement.accept(adapter); // 得到将会操作的表 
+			List<String> tableNames = adapter.tableNames;  
+			//log.debug("tablename:" + tableNames);
+			if (adapter.wheres ==null) {
+				return new WhereModel(tableNames);
+			}
+			String left=adapter.wheres.getLeft()==null?null:adapter.wheres.getLeft().toString();
+			String op=adapter.wheres.getOperator()==null?null:adapter.wheres.getOperator().toString();
+			String right=adapter.wheres.getRight()==null?null:adapter.wheres.getRight().toString();
+			String sel1="";
+			 
+			if (op==null ){
+				return new WhereModel(tableNames);
+			}
+			if (!op.equalsIgnoreCase("equality")){
+				return new WhereModel(tableNames);
+			}
+			List<SQLSelectItem> selList=adapter.selList;
+			if (selList!=null){ 
+				if (selList.size()==1 ){
+					sel1=selList.get(0).getExpr().toString(); 
+				}
+			} 
+			return new WhereModel(left,op,right,sel1,tableNames); 
+		 
 	}
 	
-	private Boolean isKey(DaoStatement st,String field,String table){ 
+	private Boolean isKey(DaoStatement st,String field,String cacheName){ 
+		 
+		Boolean isID=false;
 		if (field==null ) return false;
 		Entity<?> entityPojo=st.getEntity(); 
 		MappingField fieldID=entityPojo.getIdField(); 
 		String pojoTable=entityPojo.getTableName();
 		if (pojoTable==null) return false;
-		if (!pojoTable.equalsIgnoreCase(table)) return false;
-		if (fieldID==null) return false; 
-		return fieldID.getColumnName().equalsIgnoreCase(field);
+		//如果缓存名是视图，则不创建一级缓存，视图永远没有主键
+		if (!pojoTable.equalsIgnoreCase(cacheName)) return false;
+		
+		if (fieldID!=null  && fieldID.getColumnName()!=null) { 
+			isID= fieldID.getColumnName().equalsIgnoreCase(field);
+		}
+		
+		
+		return isID ;
 	}
 	 
 	private static String genL1CacheName(String tableName) { 
@@ -416,15 +444,11 @@ public class CacheExecExterior implements ExecExteriorMethod {
 					log.error(clazzList.get(i).get(0) + " 未使用@Table这个注解，不能创建域。");
 					continue;
 				}
-				if(view == null ){
+				if(table != null ){
 					cacheModelMap.put(table.value(), new CacheModel(table.value(),
 						Integer.parseInt(String.valueOf(clazzList.get(i).get(1)))));
-				}else{
-					cacheModelMap.put(table.value(), new CacheModel(table.value(),
-						Integer.parseInt(String.valueOf(clazzList.get(i).get(1))),view.value()) );
-				}
-				log.info(clazzList.get(i).get(0) + " 加入到域成功");
-				
+				} 
+				log.info(clazzList.get(i).get(0) + " 加入到域成功"); 
 				
 				if(view == null ){
 					log.warn(clazzList.get(i).get(0) + " 未使用@View这个注解，不能创建域。");

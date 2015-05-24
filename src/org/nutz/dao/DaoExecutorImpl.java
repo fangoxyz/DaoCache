@@ -144,7 +144,16 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 			return;
 		}
 		SQLStatementParser parser = sqlParser(prepSql);
-		List<SQLStatement> statementList = parser.parseStatementList();
+		//log.debug("st=====" + prepSql);
+		List<SQLStatement> statementList = null;
+		try {
+            statementList = parser.parseStatementList();
+        }
+        catch (Exception e) {
+            log.debug("parser SQL sql, skip cache detect!! SQL=" + prepSql);
+            super.exec(conn, st);
+            return;
+        }
 		if (statementList.size() != 1) {
 			log.warn("more than one sql in one DaoStatement!! skip cache detect!!");
 			super.exec(conn, st);
@@ -157,7 +166,7 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 			return;
 		}
 		
-		long starttime=System.currentTimeMillis();
+		//long starttime=System.currentTimeMillis();
 	      
 		boolean isReturn = false;
 		for (int i = 0; i < list.size(); i++) {
@@ -182,8 +191,8 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 				list.get(i).executeAfter(toExampleStatement(st.getParamMatrix(),st.toPreparedStatement()),st);
 			}
 		}
-		long endtime=System.currentTimeMillis();
-		System.out.println("用时:" + (endtime-starttime) + "ms");
+		//long endtime=System.currentTimeMillis();
+		//System.out.println("用时:" + (endtime-starttime) + "ms");
 	}
 	
 }

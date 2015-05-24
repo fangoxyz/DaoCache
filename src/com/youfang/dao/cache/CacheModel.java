@@ -18,7 +18,6 @@ public class CacheModel {
 	 */
 	private Integer maxElements;
 	
-	private String linkView;
 	 
 	
 	public CacheModel(){
@@ -26,19 +25,13 @@ public class CacheModel {
 	}
 	
 
-	public CacheModel(String name,Integer maxElements,String linkView){ 
-		this.linkView=linkView;
-		this.name = name;
-		this.maxElements = maxElements;
-	}
+ 
 	
-	public CacheModel(String name,Integer maxElements){
-		this.linkView=null; 
+	public CacheModel(String name,Integer maxElements){ 
 		this.name = name;
 		this.maxElements = maxElements;
 	}
-	public CacheModel(String name){
-		this.linkView=null; 
+	public CacheModel(String name){ 
 		this.name = name;
 		this.maxElements = null;
 	}
@@ -60,13 +53,5 @@ public class CacheModel {
 	public void setMaxElements(Integer maxElements) {
 		this.maxElements = maxElements;
 	}
-
-
-	public String getLinkView() {
-		return linkView;
-	}
-	public void setLinkView(String linkView) {
-		this.linkView = linkView;
-	}
-  
+ 
 }
