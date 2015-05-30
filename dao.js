@@ -30,6 +30,7 @@ var ioc = {
 										,["com.youfang.biz.model.NewsElement",1000]
 										,["com.youfang.biz.model.KnowledgeClass",1000] 
 			                                     ],
+						//这里配置视图的关联关系，视图从哪几个基本表中取得数据就对应地写几个关联关系
 						cacheLinks : {
 		                            "t_houseinfo":["v_houseinfo"],
 		                            "t_xiaoqu":["v_houseinfo"],
@@ -37,10 +38,7 @@ var ioc = {
                          			},
 						isEnableCache : true
 
-			},
-			events : {
-				depose : "shutDown"
-			} 
+			}
 
 		},
 
@@ -58,9 +56,12 @@ var ioc = {
 
 			fields : {
 
-				list : [{refer : 'cache'}]
+				execMethod : {refer : 'cache'} 
 
-			}  
+			},
+			events : {
+				depose : "shutDown"
+			} 
 			
 
 		},

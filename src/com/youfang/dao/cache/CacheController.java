@@ -11,7 +11,7 @@ import java.util.List;
 * @date 2012-7-6 上午10:14:01
  */
 public interface CacheController {
-	
+	public boolean isReady();
 	/**
 	* @Title: flush    
 	* @Description: 清理该域所有的数据

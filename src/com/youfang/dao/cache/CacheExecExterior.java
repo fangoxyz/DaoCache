@@ -7,6 +7,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.nutz.dao.ExecExteriorMethod;
 import org.nutz.dao.entity.Entity;
@@ -18,6 +20,7 @@ import org.nutz.log.Log;
 import org.nutz.log.Logs;
 import org.nutz.plugins.cache.dao.CacheResult;
 import org.nutz.plugins.cache.dao.NSqlAdapter;
+import org.nutz.plugins.cache.dao.ThreadPoolExt;
 
 import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.ast.statement.SQLSelectItem;
@@ -38,6 +41,7 @@ public class CacheExecExterior implements ExecExteriorMethod {
 	 * 缓存域数组,表名做key，方便在执行SQL的时候读取表名
 	 */
 	private static Map<String, CacheModel> cacheModelMap = new HashMap<String, CacheModel>(); 
+	
 	/**
 	 * 是否启用缓存，默认不启用
 	 */
@@ -56,6 +60,24 @@ public class CacheExecExterior implements ExecExteriorMethod {
 	private static CacheController cacheController = null;
 	
 	private static Log log = Logs.getLog(CacheExecExterior.class);
+	
+	 
+	public boolean canCache(String sqls){
+		WhereModel where=getOneWhere(sqls);
+		if (where==null) return false;
+		List<String> tableNames =where.getTableNames();
+		//List<String> tableNames = getTableFromSql(sqls.toString()); 
+		for(String tableName:tableNames){
+			if(tableName == null || "".equals(tableName)){
+				return false;
+			} 
+			if(cacheModelMap.get(tableName) == null){
+				 
+				return false;
+			}
+		}
+		return true;
+	}
 	 
 	/*
 	 * 当执行了数据库操作后,"insert"、"update"、"delete"则清理数据,"select"则缓存数据
@@ -134,7 +156,7 @@ public class CacheExecExterior implements ExecExteriorMethod {
 					}
 				}
 			}
-			 
+			
 			if( "select".equalsIgnoreCase(type) && canCache && tables!=null && tables.size()>=1){ 
 				if (key){
 					/**
@@ -150,9 +172,7 @@ public class CacheExecExterior implements ExecExteriorMethod {
 					cacheController.addCacheLink(tables, genL2CacheName(tables));
 					cacheController.putObject(new CacheModel(genL2CacheName(tables),cacheModelMap.get(tables.get(0)).getMaxElements()),EncryptUtil.Sha256(sqls.toString(),null), st.getResult());
 					log.debug("缓存域数据到L2：" + genL2CacheName(tables) + " key:" + EncryptUtil.Sha256(sqls.toString(),null) + "  sql:"+ sqls.toString());
-				}
-				
-				
+				} 
 			}
 				 
 		}catch (Throwable e) {
@@ -185,6 +205,7 @@ public class CacheExecExterior implements ExecExteriorMethod {
 						return true;
 					} 
 					if(cacheModelMap.get(tableName) == null){
+						 
 						return true;
 					} 
 				}
@@ -205,6 +226,9 @@ public class CacheExecExterior implements ExecExteriorMethod {
 							key=isKey(st,left,tableNames.get(0)); 
 						}
 					} 
+					
+					
+					
 					if (key){
 						object = cacheController.getObject(new CacheModel(genL1CacheName(tableNames.get(0)),cacheModelMap.get(tableNames.get(0)).getMaxElements()),rightWhere);
 						 
@@ -414,8 +438,22 @@ public class CacheExecExterior implements ExecExteriorMethod {
 		return clazzList;
 	}
 	
+	public boolean isReady(){
+		return cacheController.isReady();
+	}
+	
+	 
 	
 	public void setCacheLinks(Map<String, Set<String>> cacheLinks) { 
+		while (!isReady()){
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		log.info( " Cache is started... ");
 		for(String link :cacheLinks.keySet()){
 			cacheController.putObject(new CacheModel("cachelinks"),link, cacheLinks.get(link)); 
 		} 
@@ -468,7 +506,7 @@ public class CacheExecExterior implements ExecExteriorMethod {
 	@Override
 	public void shutDown() {
 		// TODO Auto-generated method stub
-		log.info(  " ehcache is shutdown...");
+		log.warn(  " ehcache is shutdown...");
 		cacheController.shutDown();
 	} 
 	

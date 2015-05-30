@@ -13,6 +13,7 @@ import net.sf.ehcache.Cache;
 import net.sf.ehcache.CacheManager;
 import net.sf.ehcache.Ehcache;
 import net.sf.ehcache.Element;
+import net.sf.ehcache.Status;
 
 import org.nutz.log.Log;
 import org.nutz.log.Logs;
@@ -43,6 +44,9 @@ public class MemeoryCacheImpl implements CacheController {
 	private static  byte[] lock = new byte[0]; 
 	public static final byte[] NULL_OBJ = new byte[0];
 	
+	public boolean isReady(){
+		return cacheManager.getStatus()==Status.STATUS_ALIVE;
+	}
 	@SuppressWarnings("unchecked")
 	public List<String> getCacheLink(String tableName){
 		try{

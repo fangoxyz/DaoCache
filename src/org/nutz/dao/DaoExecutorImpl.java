@@ -5,22 +5,16 @@ import java.io.InputStream;
 import java.io.Reader;
 import java.lang.reflect.Array;
 import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 
-import org.nutz.dao.entity.LinkVisitor;
-import org.nutz.dao.impl.entity.NutEntity;
-import org.nutz.dao.impl.jdbc.NutPojo;
-import org.nutz.dao.impl.sql.NutStatement;
 import org.nutz.dao.impl.sql.run.NutDaoExecutor;
 import org.nutz.dao.sql.DaoStatement;
-import org.nutz.dao.sql.Pojo;
-import org.nutz.dao.sql.PojoCallback;
+import org.nutz.dao.sql.SqlType;
 import org.nutz.ioc.loader.annotation.IocBean;
 import org.nutz.log.Log;
 import org.nutz.log.Logs;
+import org.nutz.plugins.cache.dao.CallableExt;
+import org.nutz.plugins.cache.dao.ThreadPoolExt;
 
 import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.dialect.mysql.parser.MySqlStatementParser;
@@ -29,7 +23,6 @@ import com.alibaba.druid.sql.dialect.postgresql.parser.PGSQLStatementParser;
 import com.alibaba.druid.sql.parser.SQLStatementParser;
 import com.mysql.jdbc.Blob;
 import com.mysql.jdbc.Clob;
-import com.youfang.dao.cache.CacheExecExterior;
 
 /**
  * 重写daoexecutor，提供事件注册给外部调用，每当执行到该实现类时，轮询并执行对应的已注册信息。
@@ -41,11 +34,12 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 	
 	private static final Log log = Logs.get();
 	
+	private static final  ThreadPoolExt exec = new ThreadPoolExt();
 	 
 	/**
 	 * 外部已注册的列表
 	 */
-	private static  List<ExecExteriorMethod> list = new ArrayList<ExecExteriorMethod>();
+	private static   ExecExteriorMethod  execMethod =null ;
 
 	private String toExampleStatement(Object[][] mtrx, String sql) {
 
@@ -132,6 +126,8 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 		}
 	}
 	
+	
+	 
 	public void exec(Connection conn, DaoStatement st) {
 		/*
 		 * 执行execute方法前执行所有已注册的对象，
@@ -139,6 +135,7 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 		 * 然后终止！。
 		 */
 		String prepSql = st.toPreparedStatement();
+		String sql;
 		if (prepSql == null) {
 			super.exec(conn, st);
 			return;
@@ -165,34 +162,75 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 			super.exec(conn, st);
 			return;
 		}
-		
+		sql=toExampleStatement(st.getParamMatrix(),st.toPreparedStatement());
 		//long starttime=System.currentTimeMillis();
-	      
-		boolean isReturn = false;
-		for (int i = 0; i < list.size(); i++) {
-			if(list.get(i).getExecuteType() == ExecExteriorMethod.BEFORE ||
-					list.get(i).getExecuteType() == ExecExteriorMethod.AROUND){
-				if(!list.get(i).executeBefore(toExampleStatement(st.getParamMatrix(),st.toPreparedStatement()),st,conn)){
-					isReturn = true;
+		
+		 
+		if(executeBefore(sql,conn,st)){ //1.首先到缓存中去取数据
+			return;                      //2.如果缓存中有数据，则退出，不去数据库取
+		}
+		
+		if (st.getSqlType()==SqlType.SELECT && execMethod.canCache(sql)==true){  //3.如果缓存中没数据并且是select语句,则用Futer模式到数据库中去取
+			 exec.addTaskAndWaitResult(new CallableExt(sql,conn,st){ 
+				
+				@Override
+			    public Object call()  {							     //如果线程中池没有当前sql语句执行，则执行这里
+					execuSql(this.conn, this.st);					//这里执行select 语句进数据读数据
+					executeDBAfter(this.sql,this.conn,this.st);    //这里包括写入缓存
+					return "OK";								   //表示本线程执行完毕
+			    }
+				
+				public void callAtRepeat(){							 //如果线程中池有当前sql语句执行，则执行这里，这里阻塞，等待正在执行的sql语行完，然后去缓存中取数据
+					if(executeBefore(this.sql,this.conn,this.st)){ //1.首先到缓存中去取数据
+						return;                      //2.如果缓存中有数据，则退出，不去数据库取
+					}     
+					execuSql(this.conn, this.st);					//这里执行select 语句进数据读数据
+					executeDBAfter(this.sql,this.conn,this.st);    //这里包括写入缓存 
+					
 				}
-			}
+			});
+			 
+		}else{ 										//非select模式，直接执行就行了. 这里待考虑
+			execuSql(conn, st);                     //执行sql语句
+			executeDBAfter(sql,conn,st);			//执行完后对写入缓存或清空缓存
 		}
-		if(isReturn){
-			return;
-		}
-		super.exec(conn, st);
-	
-		/*
-		 * execute完成后，执行所有已注册的对象
-		 */
-		for (int i = 0; i < list.size(); i++) {
-			if(list.get(i).getExecuteType() == ExecExteriorMethod.AFTER ||
-					list.get(i).getExecuteType() == ExecExteriorMethod.AROUND){
-				list.get(i).executeAfter(toExampleStatement(st.getParamMatrix(),st.toPreparedStatement()),st);
-			}
-		}
+		 
 		//long endtime=System.currentTimeMillis();
 		//System.out.println("用时:" + (endtime-starttime) + "ms");
 	}
+	
+	private void execuSql(Connection conn, DaoStatement st){
+		//log.warn("execuSql"  );
+		super.exec(conn, st);
+	}
+	
+	private boolean executeBefore(String sql,Connection conn, DaoStatement st){
+		//log.warn("executeBefore"  );
+		if(execMethod.getExecuteType() == ExecExteriorMethod.BEFORE ||
+				execMethod.getExecuteType() == ExecExteriorMethod.AROUND){
+			if(!execMethod.executeBefore(sql,st,conn)){
+				return true;
+			}
+		}
+		return false;
+	}
+	private void executeDBAfter(String sql,Connection conn, DaoStatement st){
+		//log.warn("执行了数据库" + exec.getNewThreadId()) ;
+		//log.warn("executeDBAfter"  );
+		if(execMethod.getExecuteType() == ExecExteriorMethod.AFTER ||
+				execMethod.getExecuteType() == ExecExteriorMethod.AROUND){
+			execMethod.executeAfter(sql,st);
+		}
+	}
+	
+	 
+	public void shutDown() {
+		// TODO Auto-generated method stub
+		log.warn(  " exec is shutdown...");
+		exec.purgeCancelTask(); 
+		exec.stop(); 
+		execMethod.shutDown();
+	} 
+	 
 	
 }

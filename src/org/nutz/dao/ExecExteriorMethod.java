@@ -2,6 +2,7 @@ package org.nutz.dao;
 
 import java.sql.Connection;
 import java.util.HashMap;
+import java.util.List;
 
 import org.nutz.dao.sql.DaoStatement;
 /**
@@ -50,7 +51,9 @@ public interface ExecExteriorMethod {
 	 * 实现类可以实现该方法，该方法提供实现类允许在方法执行时传递数据
 	 * @return
 	 */
-	public HashMap<String, Object> getTemp();
+	public HashMap<String, Object> getTemp(); 
+	
+	public boolean canCache(String sqls);
 	
 	/**
 	 * 获取实现类的执行方式
