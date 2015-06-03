@@ -38,7 +38,10 @@ var ioc = {
                          			},
 						isEnableCache : true
 
-			}
+			} ,
+			events : {
+				create : "init"
+			} 
 
 		},
 

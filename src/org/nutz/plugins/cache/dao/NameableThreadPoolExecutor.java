@@ -102,7 +102,15 @@ public class NameableThreadPoolExecutor extends ThreadPoolExecutor {
         }
         return super.remove(task);
     }
-
+    
+    public void put(String key,FutureTaskExt task){
+    	threads.put(key, task); 
+    }
+    
+    public FutureTaskExt get(String key){
+    	return threads.get(key); 
+    }
+    
     private boolean contains(FutureTaskExt task) {
     	boolean exist=false; 
     	String name=task.getSql();
@@ -143,6 +151,7 @@ public class NameableThreadPoolExecutor extends ThreadPoolExecutor {
 		log.debug("remove thread :" + name);
 		return;
 	}
+	
 	
       
 }

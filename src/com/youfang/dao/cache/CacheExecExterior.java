@@ -51,6 +51,7 @@ public class CacheExecExterior implements ExecExteriorMethod {
 	 * 需要加入缓存的类地址和缓存时间
 	 */
 	private List<List<String>> clazzList;
+	private Map<String, Set<String>> cacheLinks;
 	
 	/**
 	 * 执行方式
@@ -61,7 +62,21 @@ public class CacheExecExterior implements ExecExteriorMethod {
 	
 	private static Log log = Logs.getLog(CacheExecExterior.class);
 	
-	 
+	public void init(){
+		while (!isReady()){
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		log.info( " Cache is started... ");
+		//log.info("直接操作了cachelinks");
+		for(String link :this.cacheLinks.keySet()){
+			cacheController.putObject(new CacheModel("cachelinks"),link, cacheLinks.get(link)); 
+		} 
+	}
 	public boolean canCache(String sqls){
 		WhereModel where=getOneWhere(sqls);
 		if (where==null) return false;
@@ -445,18 +460,7 @@ public class CacheExecExterior implements ExecExteriorMethod {
 	 
 	
 	public void setCacheLinks(Map<String, Set<String>> cacheLinks) { 
-		while (!isReady()){
-			try {
-				Thread.sleep(100);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
-		log.info( " Cache is started... ");
-		for(String link :cacheLinks.keySet()){
-			cacheController.putObject(new CacheModel("cachelinks"),link, cacheLinks.get(link)); 
-		} 
+		this.cacheLinks=cacheLinks;
 	}
 	public void setClazzList(List<List<String>> clazzList) {
 		//目前调试起来是单例的，以后不晓得会不会加单例的控制，这里控制一下

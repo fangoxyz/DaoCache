@@ -15,11 +15,13 @@ import org.nutz.log.Log;
 import org.nutz.log.Logs;
 import org.nutz.plugins.cache.dao.CallableExt;
 import org.nutz.plugins.cache.dao.ThreadPoolExt;
+import org.nutz.trans.Trans;
 
 import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.dialect.mysql.parser.MySqlStatementParser;
 import com.alibaba.druid.sql.dialect.oracle.parser.OracleStatementParser;
 import com.alibaba.druid.sql.dialect.postgresql.parser.PGSQLStatementParser;
+import com.alibaba.druid.sql.dialect.sqlserver.parser.SQLServerStatementParser;
 import com.alibaba.druid.sql.parser.SQLStatementParser;
 import com.mysql.jdbc.Blob;
 import com.mysql.jdbc.Clob;
@@ -117,6 +119,8 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 		switch (db) {
 		case MYSQL:
 			return new MySqlStatementParser(sql);
+		case SQLSERVER:
+			return new SQLServerStatementParser(sql);
 		case ORACLE:
 			return new OracleStatementParser(sql);
 		case PSQL:
@@ -170,7 +174,7 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 			return;                      //2.如果缓存中有数据，则退出，不去数据库取
 		}
 		
-		if (st.getSqlType()==SqlType.SELECT && execMethod.canCache(sql)==true){  //3.如果缓存中没数据并且是select语句,则用Futer模式到数据库中去取
+		if (st.getSqlType()==SqlType.SELECT && Trans.isTransactionNone() && execMethod.canCache(sql)==true){  //3.如果缓存中没数据并且是select语句,则用Futer模式到数据库中去取
 			 exec.addTaskAndWaitResult(new CallableExt(sql,conn,st){ 
 				
 				@Override
@@ -190,7 +194,7 @@ public class DaoExecutorImpl extends NutDaoExecutor {
 				}
 			});
 			 
-		}else{ 										//非select模式，直接执行就行了. 这里待考虑
+		}else{									//非select模式，直接执行就行了. 这里待考虑
 			execuSql(conn, st);                     //执行sql语句
 			executeDBAfter(sql,conn,st);			//执行完后对写入缓存或清空缓存
 		}

@@ -76,11 +76,13 @@ public class MemeoryCacheImpl implements CacheController {
 			//使用同步的方式读取缓存域中的数据，对数据操作就直接修改了数据
 			List<String> cacheLink= (List<String>)  getObjectSyn(new CacheModel("cachelinks"),tableName);
 			if (cacheLink==null){
+				log.info("生成了一个全新的 cachelinks");
 				cacheLink=new ArrayList<String>();
 				cacheLink.add(linkName); 
 				putObject(new CacheModel("cachelinks"),tableName,cacheLink); 
 				return;
 			}else if (!cacheLink.contains(linkName)){ 
+				log.info("直接操作cachelinks");
 				cacheLink.add(linkName); 
 				//putObject(new CacheModel("cachelinks"),tableName,cacheLink); 
 			}
